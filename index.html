@@ -600,13 +600,14 @@ function update() {
   document.getElementById('kpiDD').textContent = fmt(maxDD);
   document.getElementById('kpiDDPct').textContent = (maxDDPct * 100).toFixed(2) + '% of peak';
 
-  // Monthly table (all real data)
+  // Monthly table — actual backtest PnL, scaled to current position size
+  // % return is on position (what the strategy did), not leveraged equity
   const slipPerTrade = slip * BASE_POS;
   const mBody = document.getElementById('monthlyBody');
   mBody.innerHTML = '';
   for (const [mo, data] of monthlyData) {
     const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
-    const ret = pnl / cap * 100;
+    const ret = data.pnl / BASE_POS * 100; // position-level return %
     const cls = pctClass(pnl);
     mBody.innerHTML += `<tr>
       <td>${mo}</td>
@@ -621,7 +622,7 @@ function update() {
   aBody.innerHTML = '';
   for (const [yr, data] of annualData) {
     const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
-    const ret = pnl / cap * 100;
+    const ret = data.pnl / BASE_POS * 100; // position-level return %
     const cls = pctClass(pnl);
     aBody.innerHTML += `<tr>
       <td>${yr}</td>
@@ -683,12 +684,28 @@ function drawView(backtestCurve, cap, scale) {
     drawChart(rebased, cap, labels);
 
   } else if (currentView === '1yr') {
-    // Full 12-month backtest — starts at capital
-    const labels = ['Start', ...RAW.map(r => r[0])];
-    drawChart(backtestCurve, cap, labels);
+    // Last 12 months of trades, rebased from capital
+    const cutoffDate = new Date(RAW[RAW.length - 1][0]);
+    cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+    const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+    let firstIdx = 0;
+    for (let i = 0; i < RAW.length; i++) {
+      if (RAW[i][0] >= cutoffStr) { firstIdx = i; break; }
+    }
+    const startCumPnl = firstIdx > 0 ? RAW[firstIdx - 1][2] : 0;
+    const rebased = [cap];
+    const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
+    for (let i = firstIdx; i < RAW.length; i++) {
+      const tradePctReturn = RAW[i][1] / BASE_POS;
+      const currentPos = Math.min(rebased[rebased.length - 1] * lev, MAX_POSITION);
+      const dollarPnl = currentPos * (tradePctReturn - slip);
+      rebased.push(rebased[rebased.length - 1] + dollarPnl);
+      labels.push(RAW[i][0]);
+    }
+    drawChart(rebased, cap, labels);
 
   } else {
-    // Full backtest — all real trade data (same as 1Y but all trades)
+    // All — full backtest
     const labels = ['Start', ...RAW.map(r => r[0])];
     drawChart(backtestCurve, cap, labels);
   }
