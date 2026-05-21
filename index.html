@@ -157,6 +157,25 @@ input[type=range]::-moz-range-thumb {
   font-variant-numeric:tabular-nums;
 }
 
+/* ── Timeframe Bar ── */
+.tf-bar {
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px 24px;
+  margin-bottom:24px;
+}
+.tf-label {
+  font-size:14px; font-weight:600; letter-spacing:-0.2px;
+}
+.tf-bar .chart-tab {
+  padding:8px 20px; font-size:13px; font-weight:500;
+}
+.tf-bar .chart-tab.active {
+  background:var(--green-dim); border-color:rgba(0,230,118,.2); color:var(--green);
+}
+
 /* ── Leverage Risk Strip ── */
 .risk-strip {
   background:var(--surface);
@@ -382,6 +401,16 @@ tbody tr:hover { background:var(--blue-dim); }
     </div>
   </div>
 
+  <!-- Timeframe Selector (controls everything) -->
+  <div class="tf-bar">
+    <div class="tf-label">Performance Period</div>
+    <div class="chart-tabs" id="tfTabs">
+      <button class="chart-tab" data-view="1mo" onclick="setView('1mo')">1 Month</button>
+      <button class="chart-tab active" data-view="1yr" onclick="setView('1yr')">1 Year</button>
+      <button class="chart-tab" data-view="4yr" onclick="setView('4yr')">All Time</button>
+    </div>
+  </div>
+
   <!-- Leverage Risk (dynamic) -->
   <div class="risk-strip" id="riskStrip">
     <div class="risk-strip-grid">
@@ -412,7 +441,7 @@ tbody tr:hover { background:var(--blue-dim); }
   <div class="perf-hero">
     <div class="perf-hero-head">
       <div class="perf-hero-title">Backtested Performance</div>
-      <div class="perf-hero-sub">at selected capital &middot; flat position sizing</div>
+      <div class="perf-hero-sub" id="perfPeriodLabel">—</div>
     </div>
     <div class="perf-hero-grid">
       <div class="perf-card featured">
@@ -426,12 +455,12 @@ tbody tr:hover { background:var(--blue-dim); }
         <div class="pc-sub" id="proj2d">—</div>
       </div>
       <div class="perf-card">
-        <div class="pc-label">Annual Avg</div>
+        <div class="pc-label">Profit Factor</div>
         <div class="pc-val" id="proj3">—</div>
         <div class="pc-sub" id="proj3d">—</div>
       </div>
       <div class="perf-card">
-        <div class="pc-label">Total Trades</div>
+        <div class="pc-label">Win Rate</div>
         <div class="pc-val" id="proj4">—</div>
         <div class="pc-sub" id="proj4d">—</div>
       </div>
@@ -443,24 +472,17 @@ tbody tr:hover { background:var(--blue-dim); }
     <div class="kpi"><div class="k-label">Net Return</div><div class="k-val kc-green" id="kpiReturn">—</div><div class="k-sub" id="kpiReturnPct">—</div></div>
     <div class="kpi"><div class="k-label">Final Equity</div><div class="k-val kc-white" id="kpiFinal">—</div><div class="k-sub" id="kpiFinalMult">—</div></div>
     <div class="kpi"><div class="k-label">Max Drawdown</div><div class="k-val kc-amber" id="kpiDD">—</div><div class="k-sub" id="kpiDDPct">—</div></div>
-    <div class="kpi"><div class="k-label">Profit Factor</div><div class="k-val kc-green" id="kpiPF">2.44</div><div class="k-sub">Long 2.45 / Short 2.42</div></div>
-    <div class="kpi"><div class="k-label">Win Rate</div><div class="k-val kc-white" id="kpiWR">73.08%</div><div class="k-sub">4,743 W / 1,741 L</div></div>
+    <div class="kpi"><div class="k-label">Total Trades</div><div class="k-val kc-white" id="kpiTrades">—</div><div class="k-sub" id="kpiTradesSub">—</div></div>
+    <div class="kpi"><div class="k-label">Avg Trade</div><div class="k-val kc-green" id="kpiAvgTrade">—</div><div class="k-sub" id="kpiAvgTradeSub">—</div></div>
   </div>
 
   <!-- Chart -->
   <div class="chart-block">
     <div class="chart-head">
       <div class="chart-title">Equity Curve</div>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <div class="chart-tabs" id="chartTabs">
-          <button class="chart-tab" data-view="1mo" onclick="setView('1mo')">1M</button>
-          <button class="chart-tab active" data-view="1yr" onclick="setView('1yr')">1Y</button>
-          <button class="chart-tab" data-view="4yr" onclick="setView('4yr')">All</button>
-        </div>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:var(--green)"></span>Equity</span>
-          <span><span class="dot" style="background:rgba(255,255,255,.15)"></span>Capital</span>
-        </div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--green)"></span>Equity</span>
+        <span><span class="dot" style="background:rgba(255,255,255,.15)"></span>Capital</span>
       </div>
     </div>
     <canvas id="equityCanvas"></canvas>
@@ -536,6 +558,27 @@ function computeAnnual(monthly) {
 
 const monthlyData = computeMonthly();
 const annualData = computeAnnual(monthlyData);
+
+function computeMonthlyFrom(trades) {
+  const m = {};
+  for (const [date, pnl] of trades) {
+    const mo = date.slice(0, 7);
+    if (!m[mo]) m[mo] = { pnl: 0, trades: 0 };
+    m[mo].pnl += pnl;
+    m[mo].trades++;
+  }
+  return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0]));
+}
+function computeAnnualFrom(monthly) {
+  const a = {};
+  for (const [mo, data] of monthly) {
+    const yr = mo.slice(0, 4);
+    if (!a[yr]) a[yr] = { pnl: 0, trades: 0 };
+    a[yr].pnl += data.pnl;
+    a[yr].trades += data.trades;
+  }
+  return Object.entries(a).sort((a, b) => a[0].localeCompare(b[0]));
+}
 
 // All data is real — no need for separate 3.5yr constants
 
@@ -648,22 +691,41 @@ function update() {
   vEl.style.background = v.bg;
   vEl.style.color = v.color;
 
-  // Build equity curve with compounding leverage + slippage
-  // Each trade: PnL% from backtest applied to current position size
+  // ── Filter trades by timeframe ──
+  let filteredRAW;
+  let periodLabel;
+  if (currentView === '1mo') {
+    const cutoff = new Date(RAW[RAW.length - 1][0]);
+    cutoff.setMonth(cutoff.getMonth() - 1);
+    const cutStr = cutoff.toISOString().slice(0, 10);
+    filteredRAW = RAW.filter(r => r[0] >= cutStr);
+    periodLabel = 'Last 30 days';
+  } else if (currentView === '1yr') {
+    const cutoff = new Date(RAW[RAW.length - 1][0]);
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutStr = cutoff.toISOString().slice(0, 10);
+    filteredRAW = RAW.filter(r => r[0] >= cutStr);
+    periodLabel = 'Last 12 months';
+  } else {
+    filteredRAW = RAW;
+    periodLabel = 'Aug 2022 — May 2026 · ' + RAW.length.toLocaleString() + ' trades';
+  }
+  document.getElementById('perfPeriodLabel').textContent = periodLabel;
+
+  // ── Build equity curve from filtered trades ──
   const equityCurve = [cap];
   let equity = cap;
   let peak = cap, maxDD = 0, maxDDPct = 0;
+  let grossWin = 0, grossLoss = 0, wins = 0, losses = 0;
 
-  for (let i = 0; i < RAW.length; i++) {
-    const tradePnl = RAW[i][1]; // PnL in $ on $250K positions
-    const tradePctReturn = tradePnl / BASE_POS; // % return on position
-
-    // Position size: at 1x = flat (no compounding), >1x = compounds with equity
+  for (let i = 0; i < filteredRAW.length; i++) {
+    const tradePctReturn = filteredRAW[i][1] / BASE_POS;
     const currentPos = lev === 1 ? cap : Math.min(equity * lev, maxPos);
-
-    // Apply trade return + slippage to current position
     const dollarPnl = currentPos * (tradePctReturn - slip);
     equity += dollarPnl;
+
+    if (dollarPnl > 0) { grossWin += dollarPnl; wins++; }
+    else if (dollarPnl < 0) { grossLoss += Math.abs(dollarPnl); losses++; }
 
     equityCurve.push(equity);
     if (equity > peak) peak = equity;
@@ -672,131 +734,78 @@ function update() {
     if (dd > maxDD) { maxDD = dd; maxDDPct = ddPct; }
   }
 
-  // For non-compounding calculations (tables, hero cards) use flat scale
   const scale = initPos / BASE_POS;
-
   const finalEq = equity;
   const netReturn = finalEq - cap;
   const returnPct = (netReturn / cap * 100);
+  const nTrades = filteredRAW.length;
+  const pf = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
+  const wr = nTrades > 0 ? (wins / nTrades * 100) : 0;
 
-  // KPIs
+  // ── Hero cards ──
+  document.getElementById('proj1').textContent = fmt(finalEq);
+  document.getElementById('proj1d').textContent = '+' + fmt(netReturn) + ' profit';
+
+  const tfMonths = currentView === '1mo' ? 1 : currentView === '1yr' ? 12 : monthlyData.length;
+  const monthlyAvgPnl = netReturn / Math.max(tfMonths, 1);
+  document.getElementById('proj2').textContent = fmt(monthlyAvgPnl);
+  document.getElementById('proj2d').textContent = (monthlyAvgPnl / cap * 100).toFixed(1) + '% of capital';
+
+  document.getElementById('proj3').textContent = pf === Infinity ? 'INF' : pf.toFixed(2);
+  document.getElementById('proj3d').textContent = wins + 'W / ' + losses + 'L';
+
+  document.getElementById('proj4').textContent = wr.toFixed(1) + '%';
+  document.getElementById('proj4d').textContent = nTrades.toLocaleString() + ' trades';
+
+  // ── KPIs ──
   document.getElementById('kpiReturn').textContent = fmt(netReturn);
-  document.getElementById('kpiReturnPct').textContent = '+' + returnPct.toFixed(1) + '%';
+  document.getElementById('kpiReturnPct').textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
   document.getElementById('kpiFinal').textContent = fmt(finalEq);
   document.getElementById('kpiFinalMult').textContent = (finalEq / cap).toFixed(2) + '× initial';
   document.getElementById('kpiDD').textContent = fmt(maxDD);
   document.getElementById('kpiDDPct').textContent = (maxDDPct * 100).toFixed(2) + '% of peak';
+  document.getElementById('kpiTrades').textContent = nTrades.toLocaleString();
+  document.getElementById('kpiTradesSub').textContent = wins + 'W / ' + losses + 'L';
+  const avgTrade = nTrades > 0 ? netReturn / nTrades : 0;
+  document.getElementById('kpiAvgTrade').textContent = fmt(avgTrade);
+  document.getElementById('kpiAvgTradeSub').textContent = 'per trade';
 
-  // Monthly table — actual backtest PnL, scaled to current position size
-  // % return is on position (what the strategy did), not leveraged equity
+  // ── Monthly table (filtered period) ──
   const slipPerTrade = slip * BASE_POS;
+  const filteredMonthly = computeMonthlyFrom(filteredRAW);
   const mBody = document.getElementById('monthlyBody');
   mBody.innerHTML = '';
-  for (const [mo, data] of monthlyData) {
+  for (const [mo, data] of filteredMonthly) {
     const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
-    const ret = data.pnl / BASE_POS * 100; // position-level return %
+    const ret = data.pnl / BASE_POS * 100;
     const cls = pctClass(pnl);
-    mBody.innerHTML += `<tr>
-      <td>${mo}</td>
-      <td class="${cls}">${pnl >= 0 ? '+' : ''}${fmt(pnl)}</td>
-      <td class="${cls}">${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%</td>
-      <td>${data.trades}</td>
-    </tr>`;
+    mBody.innerHTML += '<tr><td>' + mo + '</td><td class="' + cls + '">' + (pnl >= 0 ? '+' : '') + fmt(pnl) + '</td><td class="' + cls + '">' + (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</td><td>' + data.trades + '</td></tr>';
   }
 
-  // Annual table (full 3.5 years)
+  // Annual table (filtered period)
+  const filteredAnnual = computeAnnualFrom(filteredMonthly);
   const aBody = document.getElementById('annualBody');
   aBody.innerHTML = '';
-  for (const [yr, data] of annualData) {
+  for (const [yr, data] of filteredAnnual) {
     const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
-    const ret = data.pnl / BASE_POS * 100; // position-level return %
+    const ret = data.pnl / BASE_POS * 100;
     const cls = pctClass(pnl);
-    aBody.innerHTML += `<tr>
-      <td>${yr}</td>
-      <td class="${cls}">${pnl >= 0 ? '+' : ''}${fmt(pnl)}</td>
-      <td class="${cls}">${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%</td>
-      <td>${data.trades}</td>
-    </tr>`;
+    aBody.innerHTML += '<tr><td>' + yr + '</td><td class="' + cls + '">' + (pnl >= 0 ? '+' : '') + fmt(pnl) + '</td><td class="' + cls + '">' + (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</td><td>' + data.trades + '</td></tr>';
   }
 
-  // Backtested results — all from real curve
-  const totalMonths = monthlyData.length;
-  const monthlyAvgPnl = netReturn / totalMonths;
-  const annualAvgPnl = monthlyAvgPnl * 12;
-
-  document.getElementById('proj1').textContent = fmt(finalEq);
-  document.getElementById('proj1d').textContent = '+' + fmt(netReturn) + ' profit';
-
-  document.getElementById('proj2').textContent = fmt(monthlyAvgPnl);
-  document.getElementById('proj2d').textContent = (monthlyAvgPnl / cap * 100).toFixed(1) + '% of capital';
-
-  document.getElementById('proj3').textContent = fmt(annualAvgPnl);
-  document.getElementById('proj3d').textContent = (annualAvgPnl / cap * 100).toFixed(1) + '% of capital';
-
-  document.getElementById('proj4').textContent = RAW.length.toLocaleString();
-  document.getElementById('proj4d').textContent = totalMonths + ' months';
-
-  // Draw chart based on current view
-  drawView(equityCurve, cap, scale);
+  // ── Draw equity curve ──
+  const labels = ['Start', ...filteredRAW.map(r => r[0])];
+  drawChart(equityCurve, cap, labels);
 }
 
 function setView(v) {
   currentView = v;
-  document.querySelectorAll('#chartTabs .chart-tab').forEach(t =>
+  document.querySelectorAll('#tfTabs .chart-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.view === v));
   update();
 }
 
-function drawView(backtestCurve, cap, scale) {
-  if (currentView === '1mo') {
-    // Last month: rebase so curve starts at capital
-    // Find trades from the last month
-    const lastMo = RAW[RAW.length - 1][0].slice(0, 7);
-    let firstIdx = RAW.length - 1;
-    while (firstIdx > 0 && RAW[firstIdx - 1][0].slice(0, 7) === lastMo) firstIdx--;
-    // Also include the prior month for context
-    if (firstIdx > 0) {
-      const prevMo = RAW[firstIdx - 1][0].slice(0, 7);
-      while (firstIdx > 0 && RAW[firstIdx - 1][0].slice(0, 7) === prevMo) firstIdx--;
-    }
-
-    // Build rebased curve: cap + PnL earned in this window only
-    const startCumPnl = firstIdx > 0 ? RAW[firstIdx - 1][2] : 0;
-    const rebased = [cap];
-    const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
-    for (let i = firstIdx; i < RAW.length; i++) {
-      rebased.push(cap + (RAW[i][2] - startCumPnl) * scale);
-      labels.push(RAW[i][0]);
-    }
-    drawChart(rebased, cap, labels);
-
-  } else if (currentView === '1yr') {
-    // Last 12 months of trades, rebased from capital
-    const cutoffDate = new Date(RAW[RAW.length - 1][0]);
-    cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
-    const cutoffStr = cutoffDate.toISOString().slice(0, 10);
-    let firstIdx = 0;
-    for (let i = 0; i < RAW.length; i++) {
-      if (RAW[i][0] >= cutoffStr) { firstIdx = i; break; }
-    }
-    const startCumPnl = firstIdx > 0 ? RAW[firstIdx - 1][2] : 0;
-    const rebased = [cap];
-    const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
-    for (let i = firstIdx; i < RAW.length; i++) {
-      const tradePctReturn = RAW[i][1] / BASE_POS;
-      const currentPos = lev === 1 ? cap : Math.min(rebased[rebased.length - 1] * lev, maxPos);
-      const dollarPnl = currentPos * (tradePctReturn - slip);
-      rebased.push(rebased[rebased.length - 1] + dollarPnl);
-      labels.push(RAW[i][0]);
-    }
-    drawChart(rebased, cap, labels);
-
-  } else {
-    // All — full backtest
-    const labels = ['Start', ...RAW.map(r => r[0])];
-    drawChart(backtestCurve, cap, labels);
-  }
-}
+// drawView removed — timeframe filtering now happens in update()
 
 // ── Canvas chart ──
 function drawChart(curve, baseline, labels, projStartIdx) {
