@@ -157,46 +157,54 @@ input[type=range]::-moz-range-thumb {
   font-variant-numeric:tabular-nums;
 }
 
-/* ── Leverage Risk Table ── */
-.risk-table-block {
+/* ── Leverage Risk Strip ── */
+.risk-strip {
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:24px 28px;
+  padding:20px 24px;
   margin-bottom:24px;
 }
-.risk-table-head {
-  display:flex; align-items:baseline; gap:12px; margin-bottom:16px;
+.risk-strip-grid {
+  display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:24px;
+  align-items:center;
 }
-.risk-table-title { font-size:15px; font-weight:600; letter-spacing:-0.2px; }
-.risk-table-sub { font-size:12px; color:var(--dim); }
-.risk-table {
-  width:100%; border-collapse:collapse;
-}
-.risk-table th {
+.risk-metric { min-width:0; }
+.rm-label {
   font-size:10px; font-weight:500; letter-spacing:0.8px;
-  text-transform:uppercase; color:var(--dim);
-  padding:10px 14px; text-align:left;
-  border-bottom:1px solid var(--border);
+  text-transform:uppercase; color:var(--dim); margin-bottom:6px;
 }
-.risk-table td {
-  padding:10px 14px; font-size:13px; font-variant-numeric:tabular-nums;
-  border-bottom:1px solid var(--border); color:var(--muted);
+.rm-val {
+  font-size:22px; font-weight:700; font-variant-numeric:tabular-nums;
+  letter-spacing:-0.5px; margin-bottom:8px;
+  transition:color .3s;
 }
-.risk-table tr.active-lev {
-  background:rgba(0,230,118,.06);
+.rm-bar {
+  height:4px; background:var(--surface2); border-radius:2px;
+  overflow:hidden;
 }
-.risk-table tr.active-lev td { color:var(--text); font-weight:500; }
-.verdict {
-  font-size:11px; font-weight:600; padding:3px 10px;
-  border-radius:4px; white-space:nowrap;
+.rm-fill {
+  height:100%; border-radius:2px;
+  background:var(--green);
+  transition:width .4s ease, background .4s ease;
+  width:0%;
 }
-.verdict.conservative { background:rgba(0,230,118,.12); color:var(--green); }
-.verdict.aggressive { background:rgba(68,138,255,.12); color:var(--blue); }
-.verdict.optimal { background:rgba(0,230,118,.15); color:var(--green); }
-.verdict.stomach { background:rgba(255,215,0,.12); color:var(--amber); }
-.verdict.death { background:rgba(255,82,82,.12); color:var(--red); }
-.verdict.blown { background:rgba(255,82,82,.2); color:var(--red); }
+.rm-fill.warn { background:var(--amber); }
+.rm-fill.danger { background:var(--red); }
+.rm-fill.ruin { background:var(--red); }
+.risk-verdict-wrap {
+  text-align:center; min-width:140px;
+}
+.rv-badge {
+  display:inline-block;
+  font-size:12px; font-weight:600; padding:6px 16px;
+  border-radius:6px; margin-top:4px;
+  transition:background .3s, color .3s;
+  white-space:nowrap;
+}
+.rv-note {
+  font-size:10px; color:var(--dim); margin-top:8px;
+}
 
 /* ── KPI Strip ── */
 .kpis {
@@ -317,6 +325,7 @@ tbody tr:hover { background:var(--blue-dim); }
 @media(max-width:800px) {
   .kpis { grid-template-columns:repeat(3,1fr); }
   .perf-hero-grid { grid-template-columns:repeat(2,1fr); }
+  .risk-strip-grid { grid-template-columns:1fr 1fr; gap:16px; }
   .tables-grid { grid-template-columns:1fr; }
   .slider-row { flex-wrap:wrap; }
   .slider-val { min-width:auto; }
@@ -373,25 +382,30 @@ tbody tr:hover { background:var(--blue-dim); }
     </div>
   </div>
 
-  <!-- Leverage Risk Profile -->
-  <div class="risk-table-block">
-    <div class="risk-table-head">
-      <div class="risk-table-title">Leverage Risk Profile</div>
-      <div class="risk-table-sub">Monte Carlo simulation &middot; 10,000 runs</div>
+  <!-- Leverage Risk (dynamic) -->
+  <div class="risk-strip" id="riskStrip">
+    <div class="risk-strip-grid">
+      <div class="risk-metric">
+        <div class="rm-label">Median Max DD</div>
+        <div class="rm-val" id="riskMDD">—</div>
+        <div class="rm-bar"><div class="rm-fill" id="riskMDDBar"></div></div>
+      </div>
+      <div class="risk-metric">
+        <div class="rm-label">95th Percentile DD</div>
+        <div class="rm-val" id="risk95">—</div>
+        <div class="rm-bar"><div class="rm-fill" id="risk95Bar"></div></div>
+      </div>
+      <div class="risk-metric">
+        <div class="rm-label">Risk of Ruin</div>
+        <div class="rm-val" id="riskRuin">—</div>
+        <div class="rm-bar"><div class="rm-fill ruin" id="riskRuinBar"></div></div>
+      </div>
+      <div class="risk-verdict-wrap">
+        <div class="rm-label">Verdict</div>
+        <div class="rv-badge" id="riskVerdict">—</div>
+        <div class="rv-note">Monte Carlo &middot; 10K sims</div>
+      </div>
     </div>
-    <table class="risk-table">
-      <thead><tr>
-        <th>Leverage</th><th>Median Max DD</th><th>95th DD</th><th>Ruin Risk</th><th>Verdict</th>
-      </tr></thead>
-      <tbody id="riskBody">
-        <tr data-lev="5"><td>5×</td><td>23.7%</td><td>33.4%</td><td>0%</td><td><span class="verdict conservative">Conservative pick</span></td></tr>
-        <tr data-lev="8"><td>8×</td><td>36.7%</td><td>49.8%</td><td>0%</td><td><span class="verdict aggressive">Aggressive-but-safe</span></td></tr>
-        <tr data-lev="10"><td>10×</td><td>44.7%</td><td>58.8%</td><td>0%</td><td><span class="verdict optimal">Mathematical optimal</span></td></tr>
-        <tr data-lev="20"><td>20×</td><td>78.5%</td><td>90.7%</td><td>0.05%</td><td><span class="verdict stomach">Stomach-churning</span></td></tr>
-        <tr data-lev="30"><td>30×</td><td>98.4%</td><td>99.9%</td><td>4.7%</td><td><span class="verdict death">Near-death</span></td></tr>
-        <tr data-lev="35"><td>35×+</td><td>100%</td><td>100%</td><td>100%</td><td><span class="verdict blown">Blown up</span></td></tr>
-      </tbody>
-    </table>
   </div>
 
   <!-- Backtested Performance (hero position) -->
@@ -553,13 +567,66 @@ function update() {
   posSizeEl.textContent = '$' + initPos.toLocaleString();
   levCompNote.textContent = 'compounding — positions grow with equity, capped at $500K';
 
-  // Highlight active leverage row in risk table
-  const levRows = [5, 8, 10, 20, 30, 35];
-  let closest = levRows[0];
-  for (const l of levRows) { if (lev >= l) closest = l; }
-  document.querySelectorAll('#riskBody tr').forEach(row => {
-    row.classList.toggle('active-lev', parseInt(row.dataset.lev) === closest);
-  });
+  // Interpolate risk metrics from known nodes
+  const riskNodes = [
+    { lev:1, mdd:0, p95:0, ruin:0 },
+    { lev:5, mdd:23.7, p95:33.4, ruin:0 },
+    { lev:8, mdd:36.7, p95:49.8, ruin:0 },
+    { lev:10, mdd:44.7, p95:58.8, ruin:0 },
+    { lev:20, mdd:78.5, p95:90.7, ruin:0.05 },
+    { lev:30, mdd:98.4, p95:99.9, ruin:4.7 },
+    { lev:35, mdd:100, p95:100, ruin:100 },
+  ];
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function interpRisk(l) {
+    if (l <= riskNodes[0].lev) return riskNodes[0];
+    if (l >= riskNodes[riskNodes.length-1].lev) return riskNodes[riskNodes.length-1];
+    for (let i = 0; i < riskNodes.length - 1; i++) {
+      if (l >= riskNodes[i].lev && l <= riskNodes[i+1].lev) {
+        const t = (l - riskNodes[i].lev) / (riskNodes[i+1].lev - riskNodes[i].lev);
+        return { mdd: lerp(riskNodes[i].mdd, riskNodes[i+1].mdd, t),
+                 p95: lerp(riskNodes[i].p95, riskNodes[i+1].p95, t),
+                 ruin: lerp(riskNodes[i].ruin, riskNodes[i+1].ruin, t) };
+      }
+    }
+    return riskNodes[riskNodes.length-1];
+  }
+  const risk = interpRisk(lev);
+
+  const mddEl = $('riskMDD'); const p95El = $('risk95'); const ruinEl = $('riskRuin');
+  mddEl.textContent = risk.mdd.toFixed(1) + '%';
+  p95El.textContent = risk.p95.toFixed(1) + '%';
+  ruinEl.textContent = risk.ruin < 0.01 ? '0%' : risk.ruin.toFixed(2) + '%';
+
+  // Color by severity
+  function riskColor(v) { return v < 40 ? 'var(--green)' : v < 70 ? 'var(--amber)' : 'var(--red)'; }
+  mddEl.style.color = riskColor(risk.mdd);
+  p95El.style.color = riskColor(risk.p95);
+  ruinEl.style.color = risk.ruin < 0.01 ? 'var(--green)' : risk.ruin < 1 ? 'var(--amber)' : 'var(--red)';
+
+  // Bars
+  const mddBar = $('riskMDDBar'); const p95Bar = $('risk95Bar'); const ruinBar = $('riskRuinBar');
+  mddBar.style.width = risk.mdd + '%';
+  mddBar.className = 'rm-fill' + (risk.mdd < 40 ? '' : risk.mdd < 70 ? ' warn' : ' danger');
+  p95Bar.style.width = risk.p95 + '%';
+  p95Bar.className = 'rm-fill' + (risk.p95 < 40 ? '' : risk.p95 < 70 ? ' warn' : ' danger');
+  ruinBar.style.width = Math.min(risk.ruin, 100) + '%';
+  ruinBar.className = 'rm-fill ruin';
+
+  // Verdict
+  const verdicts = [
+    { max:4, text:'Conservative pick', bg:'rgba(0,230,118,.12)', color:'var(--green)' },
+    { max:7, text:'Aggressive-but-safe', bg:'rgba(68,138,255,.12)', color:'var(--blue)' },
+    { max:12, text:'Mathematical optimal', bg:'rgba(0,230,118,.15)', color:'var(--green)' },
+    { max:22, text:'Stomach-churning', bg:'rgba(255,215,0,.12)', color:'var(--amber)' },
+    { max:32, text:'Near-death', bg:'rgba(255,82,82,.12)', color:'var(--red)' },
+    { max:999, text:'Blown up', bg:'rgba(255,82,82,.2)', color:'var(--red)' },
+  ];
+  const v = verdicts.find(v => lev <= v.max) || verdicts[verdicts.length-1];
+  const vEl = $('riskVerdict');
+  vEl.textContent = v.text;
+  vEl.style.background = v.bg;
+  vEl.style.color = v.color;
 
   // Build equity curve with compounding leverage + slippage
   // Each trade: PnL% from backtest applied to current position size
