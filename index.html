@@ -508,6 +508,8 @@ const levCompNote = document.getElementById('levCompNote');
 const canvas = document.getElementById('equityCanvas');
 const ctx = canvas.getContext('2d');
 let currentView = '1yr';
+let lev = 10;
+let slip = 0;
 
 // ── Derived data ──
 function computeMonthly() {
@@ -556,8 +558,8 @@ let maxPos = MAX_POSITION_BASE;
 
 function update() {
   const cap = parseInt(slider.value);
-  const lev = parseInt(levSlider.value);
-  const slip = parseFloat(slipSlider.value) / 100; // e.g. -0.007% → -0.00007
+  lev = parseInt(levSlider.value);
+  slip = parseFloat(slipSlider.value) / 100;
 
   capDisplay.textContent = fmtK(cap);
   levDisplay.textContent = lev + '×';
