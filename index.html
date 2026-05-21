@@ -311,7 +311,7 @@ tbody tr:hover { background:var(--blue-dim); }
         <div class="chart-tabs" id="chartTabs">
           <button class="chart-tab" data-view="1mo" onclick="setView('1mo')">1M</button>
           <button class="chart-tab active" data-view="1yr" onclick="setView('1yr')">1Y</button>
-          <button class="chart-tab" data-view="4yr" onclick="setView('4yr')">4Y</button>
+          <button class="chart-tab" data-view="4yr" onclick="setView('4yr')">3.5Y</button>
         </div>
         <div class="chart-legend">
           <span><span class="dot" style="background:var(--green)"></span>Equity</span>
@@ -340,18 +340,18 @@ tbody tr:hover { background:var(--blue-dim); }
     </div>
   </div>
 
-  <!-- 4-Year Projection -->
+  <!-- Backtest Results -->
   <div class="proj-block">
-    <div class="proj-title">Projected Growth at Backtest Rate</div>
+    <div class="proj-title">Backtested Performance at Selected Capital</div>
     <div class="proj-grid">
-      <div class="proj-card"><div class="yr">Year 1</div><div class="pv" id="proj1">—</div><div class="pd" id="proj1d">—</div></div>
-      <div class="proj-card"><div class="yr">Year 2</div><div class="pv" id="proj2">—</div><div class="pd" id="proj2d">—</div></div>
-      <div class="proj-card"><div class="yr">Year 3</div><div class="pv" id="proj3">—</div><div class="pd" id="proj3d">—</div></div>
-      <div class="proj-card"><div class="yr">Year 4</div><div class="pv" id="proj4">—</div><div class="pd" id="proj4d">—</div></div>
+      <div class="proj-card"><div class="yr">12-Month</div><div class="pv" id="proj1">—</div><div class="pd" id="proj1d">1,719 trades</div></div>
+      <div class="proj-card"><div class="yr">3.5-Year</div><div class="pv" id="proj2">—</div><div class="pd" id="proj2d">6,653 trades</div></div>
+      <div class="proj-card"><div class="yr">Monthly Avg</div><div class="pv" id="proj3">—</div><div class="pd" id="proj3d">—</div></div>
+      <div class="proj-card"><div class="yr">Annual Avg</div><div class="pv" id="proj4">—</div><div class="pd" id="proj4d">—</div></div>
     </div>
     <div class="proj-note">
-      Based on 107.87% annualized return on positions &times; 10x leverage = <strong id="projRatePct">—</strong> return on equity, compounded annually.
-      Actual results will vary. Past performance does not guarantee future results.
+      Results scaled linearly from $250K backtest positions to 10&times; leveraged position size. Position size is flat (no compounding).
+      Past performance does not guarantee future results.
     </div>
   </div>
 
@@ -478,15 +478,23 @@ function update() {
     </tr>`;
   }
 
-  // 4-year projection — compound at leveraged return on equity
-  // Backtest: 107.87% on $250K positions. With 10x leverage, return on equity = 107.87% × (cap×10/250K) / cap × cap = BASE_RETURN × 10
-  const leveragedAnnualReturn = BASE_RETURN * 10; // e.g. 1078.7% on equity at 10x
-  for (let y = 1; y <= 4; y++) {
-    const projected = cap * Math.pow(1 + leveragedAnnualReturn, y);
-    document.getElementById('proj' + y).textContent = fmt(projected);
-    document.getElementById('proj' + y + 'd').textContent = (projected / cap).toFixed(1) + '× initial';
-  }
-  document.getElementById('projRatePct').textContent = (leveragedAnnualReturn * 100).toFixed(0) + '%';
+  // Backtested results — linear scaling, no compounding
+  const pnl12mo = netReturn; // already scaled
+  const pnl35yr = BT35_PNL * scale;
+  const monthlyAvg = pnl35yr / BT35_MONTHS;
+  const annualAvg = monthlyAvg * 12;
+
+  document.getElementById('proj1').textContent = fmt(cap + pnl12mo);
+  document.getElementById('proj1d').textContent = '+' + fmt(pnl12mo) + ' profit';
+
+  document.getElementById('proj2').textContent = fmt(cap + pnl35yr);
+  document.getElementById('proj2d').textContent = '+' + fmt(pnl35yr) + ' profit';
+
+  document.getElementById('proj3').textContent = fmt(monthlyAvg);
+  document.getElementById('proj3d').textContent = (monthlyAvg / cap * 100).toFixed(1) + '% of capital';
+
+  document.getElementById('proj4').textContent = fmt(annualAvg);
+  document.getElementById('proj4d').textContent = (annualAvg / cap * 100).toFixed(1) + '% of capital';
 
   // Draw chart based on current view
   drawView(equityCurve, cap, scale);
@@ -499,10 +507,17 @@ function setView(v) {
   update();
 }
 
+// 3.5-year backtest actuals (Aug 2022 — May 2026, $250K positions)
+const BT35_PNL = 777354;   // total PnL on $250K
+const BT35_TRADES = 6653;
+const BT35_MONTHS = 42;    // ~3.5 years
+const BT35_WR = 72.01;
+const BT35_MAXDD_PCT = 5.98;
+
 function drawView(backtestCurve, cap, scale) {
   if (currentView === '1mo') {
     // Last ~30 days of backtest data
-    const lastN = Math.min(backtestCurve.length, 155); // ~154 trades in last month
+    const lastN = Math.min(backtestCurve.length, 155);
     const slice = backtestCurve.slice(-lastN);
     const labels = [];
     const startIdx = RAW.length - lastN + 1;
@@ -512,38 +527,46 @@ function drawView(backtestCurve, cap, scale) {
     }
     drawChart(slice, cap, labels);
   } else if (currentView === '1yr') {
-    // Full backtest (12 months)
+    // Full 12-month backtest
     const labels = ['Start', ...RAW.map(r => r[0])];
     drawChart(backtestCurve, cap, labels);
   } else {
-    // 4-year projection: backtest data + 3 more years of compounded growth
-    const leveragedAnnualReturn = BASE_RETURN * 10;
-    const backtestEndEq = backtestCurve[backtestCurve.length - 1];
-    const backtestMonths = monthlyData.length;
+    // 3.5-year view: 12 months of real data + 2.5 years extrapolated
+    // Position size is FLAT (no compounding) — linear PnL scaling
+    const bt35Pnl = BT35_PNL * scale; // total 3.5yr PnL at current leverage
+    const bt12Pnl = backtestCurve[backtestCurve.length - 1] - cap; // 12-month PnL
+    const priorPnl = bt35Pnl - bt12Pnl; // PnL from the earlier 30 months
+    const priorMonths = BT35_MONTHS - monthlyData.length; // ~30 months
 
-    // Build projected monthly points for years 2-4
-    // Use average monthly return from backtest
-    const totalReturnOnEquity = (backtestEndEq - cap) / cap;
-    const monthlyRate = Math.pow(1 + totalReturnOnEquity, 1 / backtestMonths) - 1;
+    // Build the curve: earlier 30 months (linear) + 12 months real data
+    const projected = [];
+    const projLabels = [];
+    const ptsPerMonth = 4;
 
-    const projected = [...backtestCurve];
-    const projLabels = ['Start', ...RAW.map(r => r[0])];
-    let eq = backtestEndEq;
-    const remainingMonths = 48 - backtestMonths; // fill up to 4 years
-    const lastDate = new Date(RAW[RAW.length - 1][0]);
-    for (let m = 1; m <= remainingMonths; m++) {
-      const d = new Date(lastDate);
+    // Earlier period: linear growth from cap to (cap + priorPnl)
+    const startDate = new Date('2022-08-01');
+    for (let m = 0; m < priorMonths; m++) {
+      const d = new Date(startDate);
       d.setMonth(d.getMonth() + m);
       const label = d.toISOString().slice(0, 7);
-      // Add ~trades-per-month points
-      const pts = 4; // 4 points per projected month for smooth curve
-      for (let p = 0; p < pts; p++) {
-        eq *= (1 + monthlyRate / pts);
-        projected.push(eq);
+      for (let p = 0; p < ptsPerMonth; p++) {
+        const progress = (m * ptsPerMonth + p) / (priorMonths * ptsPerMonth);
+        projected.push(cap + priorPnl * progress);
         projLabels.push(p === 0 ? label : '');
       }
     }
-    drawChart(projected, cap, projLabels, backtestCurve.length - 1);
+
+    const projDivider = projected.length; // where real data starts
+
+    // Append the 12-month real data (shifted up by priorPnl)
+    for (let i = 0; i < backtestCurve.length; i++) {
+      projected.push(backtestCurve[i] + priorPnl);
+      if (i === 0) projLabels.push(RAW[0] ? RAW[0][0].slice(0,7) : '');
+      else if (i <= RAW.length) projLabels.push(RAW[i-1][0]);
+      else projLabels.push('');
+    }
+
+    drawChart(projected, cap, projLabels, projDivider);
   }
 }
 
@@ -563,8 +586,11 @@ function drawChart(curve, baseline, labels, projStartIdx) {
 
   ctx.clearRect(0, 0, W, H);
 
-  const min = Math.min(...curve) * 0.98;
-  const max = Math.max(...curve) * 1.02;
+  // Always include baseline (initial capital) in Y range
+  const dataMin = Math.min(...curve);
+  const dataMax = Math.max(...curve);
+  const min = Math.min(dataMin, baseline) * 0.95;
+  const max = dataMax * 1.05;
   const range = max - min;
 
   function x(i) { return pad.left + (i / (curve.length - 1)) * cw; }
