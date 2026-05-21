@@ -151,6 +151,16 @@ input[type=range]::-moz-range-thumb {
   display:inline-block; width:8px; height:8px; border-radius:50%;
   margin-right:5px; vertical-align:middle;
 }
+.chart-tabs { display:flex; gap:4px; }
+.chart-tab {
+  padding:5px 12px; border-radius:6px; font-size:12px;
+  background:transparent; border:1px solid transparent;
+  color:var(--dim); cursor:pointer; transition:all 0.15s;
+  font-family:'Inter',sans-serif; font-variant-numeric:tabular-nums;
+}
+.chart-tab:hover { color:var(--muted); }
+.chart-tab.active { background:var(--surface2); border-color:var(--border2); color:var(--text); }
+
 #equityCanvas {
   width:100%; height:320px; display:block;
 }
@@ -297,9 +307,16 @@ tbody tr:hover { background:var(--blue-dim); }
   <div class="chart-block">
     <div class="chart-head">
       <div class="chart-title">Equity Curve</div>
-      <div class="chart-legend">
-        <span><span class="dot" style="background:var(--green)"></span>Equity</span>
-        <span><span class="dot" style="background:rgba(255,255,255,.15)"></span>Capital baseline</span>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div class="chart-tabs" id="chartTabs">
+          <button class="chart-tab" data-view="1mo" onclick="setView('1mo')">1M</button>
+          <button class="chart-tab active" data-view="1yr" onclick="setView('1yr')">1Y</button>
+          <button class="chart-tab" data-view="4yr" onclick="setView('4yr')">4Y</button>
+        </div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--green)"></span>Equity</span>
+          <span><span class="dot" style="background:rgba(255,255,255,.15)"></span>Capital</span>
+        </div>
       </div>
     </div>
     <canvas id="equityCanvas"></canvas>
@@ -357,6 +374,7 @@ const capDisplay = document.getElementById('capDisplay');
 const posSize = document.getElementById('posSize');
 const canvas = document.getElementById('equityCanvas');
 const ctx = canvas.getContext('2d');
+let currentView = '1yr';
 
 // ── Derived data ──
 function computeMonthly() {
@@ -470,12 +488,67 @@ function update() {
   }
   document.getElementById('projRatePct').textContent = (leveragedAnnualReturn * 100).toFixed(0) + '%';
 
-  // Draw chart
-  drawChart(equityCurve, cap);
+  // Draw chart based on current view
+  drawView(equityCurve, cap, scale);
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('#chartTabs .chart-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.view === v));
+  update();
+}
+
+function drawView(backtestCurve, cap, scale) {
+  if (currentView === '1mo') {
+    // Last ~30 days of backtest data
+    const lastN = Math.min(backtestCurve.length, 155); // ~154 trades in last month
+    const slice = backtestCurve.slice(-lastN);
+    const labels = [];
+    const startIdx = RAW.length - lastN + 1;
+    for (let i = 0; i < slice.length; i++) {
+      const rawIdx = startIdx + i;
+      labels.push(rawIdx >= 0 && rawIdx < RAW.length ? RAW[rawIdx][0] : '');
+    }
+    drawChart(slice, cap, labels);
+  } else if (currentView === '1yr') {
+    // Full backtest (12 months)
+    const labels = ['Start', ...RAW.map(r => r[0])];
+    drawChart(backtestCurve, cap, labels);
+  } else {
+    // 4-year projection: backtest data + 3 more years of compounded growth
+    const leveragedAnnualReturn = BASE_RETURN * 10;
+    const backtestEndEq = backtestCurve[backtestCurve.length - 1];
+    const backtestMonths = monthlyData.length;
+
+    // Build projected monthly points for years 2-4
+    // Use average monthly return from backtest
+    const totalReturnOnEquity = (backtestEndEq - cap) / cap;
+    const monthlyRate = Math.pow(1 + totalReturnOnEquity, 1 / backtestMonths) - 1;
+
+    const projected = [...backtestCurve];
+    const projLabels = ['Start', ...RAW.map(r => r[0])];
+    let eq = backtestEndEq;
+    const remainingMonths = 48 - backtestMonths; // fill up to 4 years
+    const lastDate = new Date(RAW[RAW.length - 1][0]);
+    for (let m = 1; m <= remainingMonths; m++) {
+      const d = new Date(lastDate);
+      d.setMonth(d.getMonth() + m);
+      const label = d.toISOString().slice(0, 7);
+      // Add ~trades-per-month points
+      const pts = 4; // 4 points per projected month for smooth curve
+      for (let p = 0; p < pts; p++) {
+        eq *= (1 + monthlyRate / pts);
+        projected.push(eq);
+        projLabels.push(p === 0 ? label : '');
+      }
+    }
+    drawChart(projected, cap, projLabels, backtestCurve.length - 1);
+  }
 }
 
 // ── Canvas chart ──
-function drawChart(curve, baseline) {
+function drawChart(curve, baseline, labels, projStartIdx) {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
@@ -513,28 +586,42 @@ function drawChart(curve, baseline) {
     else ctx.fillText('$' + Math.round(val/1000) + 'K', pad.left - 8, yy);
   }
 
-  // Date labels along x-axis
-  const months = new Set();
+  // Date labels along x-axis (from passed labels array)
+  const seen = new Set();
   const dateLabels = [];
-  for (let i = 0; i < RAW.length; i++) {
-    const mo = RAW[i][0].slice(0, 7);
-    if (!months.has(mo)) {
-      months.add(mo);
-      dateLabels.push({ i: i + 1, label: mo });
+  if (labels) {
+    for (let i = 0; i < labels.length; i++) {
+      const mo = (labels[i] || '').slice(0, 7);
+      if (mo && !seen.has(mo)) {
+        seen.add(mo);
+        dateLabels.push({ i, label: mo });
+      }
     }
   }
   ctx.fillStyle = 'rgba(255,255,255,.2)';
   ctx.font = '9px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  for (const dl of dateLabels) {
-    if (dl.i < curve.length) {
-      // Show every other month to avoid crowding
-      const moIdx = dateLabels.indexOf(dl);
-      if (moIdx % 2 === 0 || dateLabels.length <= 8) {
-        ctx.fillText(dl.label, x(dl.i), H - pad.bottom + 10);
-      }
+  const maxTicks = Math.floor(cw / 65);
+  const skip = Math.max(1, Math.ceil(dateLabels.length / maxTicks));
+  for (let j = 0; j < dateLabels.length; j++) {
+    if (j % skip === 0) {
+      const dl = dateLabels[j];
+      ctx.fillText(dl.label, x(dl.i), H - pad.bottom + 10);
     }
+  }
+
+  // Projection divider line
+  if (projStartIdx !== undefined && projStartIdx > 0 && projStartIdx < curve.length - 1) {
+    const px = x(projStartIdx);
+    ctx.strokeStyle = 'rgba(255,255,255,.15)';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(px, pad.top); ctx.lineTo(px, H - pad.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('projected →', px + 6, pad.top + 8);
   }
 
   // Baseline
