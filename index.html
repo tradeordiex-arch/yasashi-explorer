@@ -613,7 +613,7 @@ function update() {
   maxPos = cap * lev * 25;
   const initPos = Math.min(cap * lev, maxPos);
   posSizeEl.textContent = '$' + initPos.toLocaleString();
-  levCompNote.textContent = 'compounding — positions grow with equity';
+  levCompNote.textContent = 'flat position sizing throughout';
 
   // Interpolate risk metrics from known nodes
   const riskNodes = [
@@ -713,6 +713,8 @@ function update() {
   document.getElementById('perfPeriodLabel').textContent = periodLabel;
 
   // ── Build equity curve from filtered trades ──
+  // Position size = initial capital × leverage (flat throughout, no compounding)
+  const posSize = initPos;
   const equityCurve = [cap];
   let equity = cap;
   let peak = cap, maxDD = 0, maxDDPct = 0;
@@ -720,8 +722,7 @@ function update() {
 
   for (let i = 0; i < filteredRAW.length; i++) {
     const tradePctReturn = filteredRAW[i][1] / BASE_POS;
-    const currentPos = lev === 1 ? cap : Math.min(equity * lev, maxPos);
-    const dollarPnl = currentPos * (tradePctReturn - slip);
+    const dollarPnl = posSize * (tradePctReturn - slip);
     equity += dollarPnl;
 
     if (dollarPnl > 0) { grossWin += dollarPnl; wins++; }
