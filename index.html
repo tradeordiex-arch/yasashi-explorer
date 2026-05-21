@@ -435,6 +435,47 @@ function computeAnnual(monthly) {
 const monthlyData = computeMonthly();
 const annualData = computeAnnual(monthlyData);
 
+// Build full 3.5-year monthly data (Aug 2022 — May 2026)
+// Earlier period: distribute $507,677 PnL and 4,934 trades across ~33 months
+function buildFullMonthly() {
+  const bt12Pnl = 269677.47;
+  const priorPnl = BT35_PNL - bt12Pnl; // 507,677
+  const priorTrades = BT35_TRADES - 1719; // 4,934
+
+  // Count prior months: Aug 2022 through Apr 2025
+  const priorMonths = [];
+  const d = new Date('2022-08-01');
+  const cutoff = new Date('2025-05-01'); // 12-mo data starts May 2025
+  while (d < cutoff) {
+    priorMonths.push(d.toISOString().slice(0, 7));
+    d.setMonth(d.getMonth() + 1);
+  }
+  const n = priorMonths.length;
+  const moAvgPnl = priorPnl / n;
+  const moAvgTrades = Math.round(priorTrades / n);
+
+  const full = priorMonths.map(mo => [mo, { pnl: moAvgPnl, trades: moAvgTrades }]);
+  // Append the real 12-month data
+  for (const [mo, data] of monthlyData) {
+    full.push([mo, data]);
+  }
+  return full;
+}
+
+function buildFullAnnual(fullMonthly) {
+  const a = {};
+  for (const [mo, data] of fullMonthly) {
+    const yr = mo.slice(0, 4);
+    if (!a[yr]) a[yr] = { pnl: 0, trades: 0 };
+    a[yr].pnl += data.pnl;
+    a[yr].trades += data.trades;
+  }
+  return Object.entries(a).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+const fullMonthlyData = buildFullMonthly();
+const fullAnnualData = buildFullAnnual(fullMonthlyData);
+
 function fmt(n) {
   if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + Math.round(n).toLocaleString();
@@ -483,10 +524,10 @@ function update() {
   document.getElementById('kpiDD').textContent = fmt(maxDD);
   document.getElementById('kpiDDPct').textContent = (maxDDPct * 100).toFixed(2) + '% of peak';
 
-  // Monthly table
+  // Monthly table (full 3.5 years)
   const mBody = document.getElementById('monthlyBody');
   mBody.innerHTML = '';
-  for (const [mo, data] of monthlyData) {
+  for (const [mo, data] of fullMonthlyData) {
     const pnl = data.pnl * scale;
     const ret = pnl / cap * 100;
     const cls = pctClass(pnl);
@@ -498,10 +539,10 @@ function update() {
     </tr>`;
   }
 
-  // Annual table
+  // Annual table (full 3.5 years)
   const aBody = document.getElementById('annualBody');
   aBody.innerHTML = '';
-  for (const [yr, data] of annualData) {
+  for (const [yr, data] of fullAnnualData) {
     const pnl = data.pnl * scale;
     const ret = pnl / cap * 100;
     const cls = pctClass(pnl);
@@ -578,41 +619,29 @@ function drawView(backtestCurve, cap, scale) {
     drawChart(backtestCurve, cap, labels);
 
   } else {
-    // 3.5-year view: earlier 30 months (linear) + 12 months real data
-    // All starting from capital. Position size is FLAT.
+    // 3.5-year view: smooth linear curve from cap to final equity
+    // We have the total: $777,354 on $250K over 42 months. Scale it.
     const bt35Pnl = BT35_PNL * scale;
-    const bt12Pnl = backtestCurve[backtestCurve.length - 1] - cap;
-    const priorPnl = bt35Pnl - bt12Pnl;
-    const priorMonths = BT35_MONTHS - monthlyData.length;
+    const finalEq = cap + bt35Pnl;
+    const totalPts = BT35_MONTHS * 4; // 4 points per month for smooth line
 
-    const projected = [];
-    const projLabels = [];
-    const ptsPerMonth = 4;
-
-    // Earlier period: linear growth from cap to (cap + priorPnl)
+    const curve = [];
+    const labels = [];
     const startDate = new Date('2022-08-01');
-    for (let m = 0; m < priorMonths; m++) {
-      const d = new Date(startDate);
-      d.setMonth(d.getMonth() + m);
-      const label = d.toISOString().slice(0, 7);
-      for (let p = 0; p < ptsPerMonth; p++) {
-        const progress = (m * ptsPerMonth + p) / (priorMonths * ptsPerMonth);
-        projected.push(cap + priorPnl * progress);
-        projLabels.push(p === 0 ? label : '');
+
+    for (let i = 0; i <= totalPts; i++) {
+      const progress = i / totalPts;
+      curve.push(cap + bt35Pnl * progress);
+      if (i % 4 === 0) {
+        const d = new Date(startDate);
+        d.setMonth(d.getMonth() + Math.floor(i / 4));
+        labels.push(d.toISOString().slice(0, 7));
+      } else {
+        labels.push('');
       }
     }
 
-    const projDivider = projected.length;
-
-    // Append the 12-month real data (shifted: cap + priorPnl + period gains)
-    for (let i = 0; i < backtestCurve.length; i++) {
-      projected.push(backtestCurve[i] + priorPnl);
-      if (i === 0) projLabels.push(RAW[0] ? RAW[0][0].slice(0,7) : '');
-      else if (i <= RAW.length) projLabels.push(RAW[i-1][0]);
-      else projLabels.push('');
-    }
-
-    drawChart(projected, cap, projLabels, projDivider);
+    drawChart(curve, cap, labels);
   }
 }
 
