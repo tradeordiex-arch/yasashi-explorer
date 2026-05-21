@@ -290,7 +290,7 @@ tbody tr:hover { background:var(--blue-dim); }
       <div class="slider-val" id="capDisplay">$20K</div>
     </div>
     <div class="leverage-note">
-      10× leverage &mdash; <span id="posSize">$200,000</span> effective position size
+      10× leverage &mdash; <span id="posSize">$200,000</span> flat position size (no compounding, $500K max)
     </div>
   </div>
 
@@ -416,9 +416,11 @@ function fmtK(n) {
 function pctClass(v) { return v >= 0 ? 'pnl-pos' : 'pnl-neg'; }
 
 // ── Update everything ──
+const MAX_POSITION = 500000; // never compound beyond $500K positions
+
 function update() {
   const cap = parseInt(slider.value);
-  const eff = cap * 10;
+  const eff = Math.min(cap * 10, MAX_POSITION);
   const scale = eff / BASE_POS;
 
   capDisplay.textContent = fmtK(cap);
