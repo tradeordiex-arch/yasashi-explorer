@@ -551,29 +551,40 @@ const BT35_MAXDD_PCT = 5.98;
 
 function drawView(backtestCurve, cap, scale) {
   if (currentView === '1mo') {
-    // Last ~30 days of backtest data
-    const lastN = Math.min(backtestCurve.length, 155);
-    const slice = backtestCurve.slice(-lastN);
-    const labels = [];
-    const startIdx = RAW.length - lastN + 1;
-    for (let i = 0; i < slice.length; i++) {
-      const rawIdx = startIdx + i;
-      labels.push(rawIdx >= 0 && rawIdx < RAW.length ? RAW[rawIdx][0] : '');
+    // Last month: rebase so curve starts at capital
+    // Find trades from the last month
+    const lastMo = RAW[RAW.length - 1][0].slice(0, 7);
+    let firstIdx = RAW.length - 1;
+    while (firstIdx > 0 && RAW[firstIdx - 1][0].slice(0, 7) === lastMo) firstIdx--;
+    // Also include the prior month for context
+    if (firstIdx > 0) {
+      const prevMo = RAW[firstIdx - 1][0].slice(0, 7);
+      while (firstIdx > 0 && RAW[firstIdx - 1][0].slice(0, 7) === prevMo) firstIdx--;
     }
-    drawChart(slice, cap, labels);
+
+    // Build rebased curve: cap + PnL earned in this window only
+    const startCumPnl = firstIdx > 0 ? RAW[firstIdx - 1][2] : 0;
+    const rebased = [cap];
+    const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
+    for (let i = firstIdx; i < RAW.length; i++) {
+      rebased.push(cap + (RAW[i][2] - startCumPnl) * scale);
+      labels.push(RAW[i][0]);
+    }
+    drawChart(rebased, cap, labels);
+
   } else if (currentView === '1yr') {
-    // Full 12-month backtest
+    // Full 12-month backtest — starts at capital
     const labels = ['Start', ...RAW.map(r => r[0])];
     drawChart(backtestCurve, cap, labels);
-  } else {
-    // 3.5-year view: 12 months of real data + 2.5 years extrapolated
-    // Position size is FLAT (no compounding) — linear PnL scaling
-    const bt35Pnl = BT35_PNL * scale; // total 3.5yr PnL at current leverage
-    const bt12Pnl = backtestCurve[backtestCurve.length - 1] - cap; // 12-month PnL
-    const priorPnl = bt35Pnl - bt12Pnl; // PnL from the earlier 30 months
-    const priorMonths = BT35_MONTHS - monthlyData.length; // ~30 months
 
-    // Build the curve: earlier 30 months (linear) + 12 months real data
+  } else {
+    // 3.5-year view: earlier 30 months (linear) + 12 months real data
+    // All starting from capital. Position size is FLAT.
+    const bt35Pnl = BT35_PNL * scale;
+    const bt12Pnl = backtestCurve[backtestCurve.length - 1] - cap;
+    const priorPnl = bt35Pnl - bt12Pnl;
+    const priorMonths = BT35_MONTHS - monthlyData.length;
+
     const projected = [];
     const projLabels = [];
     const ptsPerMonth = 4;
@@ -591,9 +602,9 @@ function drawView(backtestCurve, cap, scale) {
       }
     }
 
-    const projDivider = projected.length; // where real data starts
+    const projDivider = projected.length;
 
-    // Append the 12-month real data (shifted up by priorPnl)
+    // Append the 12-month real data (shifted: cap + priorPnl + period gains)
     for (let i = 0; i < backtestCurve.length; i++) {
       projected.push(backtestCurve[i] + priorPnl);
       if (i === 0) projLabels.push(RAW[0] ? RAW[0][0].slice(0,7) : '');
