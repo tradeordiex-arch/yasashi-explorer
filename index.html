@@ -307,8 +307,28 @@ tbody tr:hover { background:var(--blue-dim); }
       </div>
       <div class="slider-val" id="capDisplay">$20K</div>
     </div>
+    <div class="slider-row" style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+      <div class="slider-label">Leverage</div>
+      <div class="slider-wrap">
+        <input type="range" id="levSlider" min="1" max="20" step="1" value="10">
+        <div class="slider-ticks">
+          <span>1×</span><span>5×</span><span>10×</span><span>15×</span><span>20×</span>
+        </div>
+      </div>
+      <div class="slider-val" id="levDisplay" style="font-size:18px; min-width:60px;">10×</div>
+    </div>
+    <div class="slider-row" style="margin-top:12px;">
+      <div class="slider-label">Slippage</div>
+      <div class="slider-wrap">
+        <input type="range" id="slipSlider" min="-0.007" max="0.018" step="0.001" value="-0.007">
+        <div class="slider-ticks">
+          <span>-0.007%</span><span>0%</span><span>+0.018%</span>
+        </div>
+      </div>
+      <div class="slider-val" id="slipDisplay" style="font-size:18px; min-width:80px;">-0.007%</div>
+    </div>
     <div class="leverage-note">
-      10× leverage &mdash; <span id="posSize">$200,000</span> flat position size (no compounding, $500K max)
+      <span id="posSize">$200,000</span> position size (<span id="levCompNote">compounding — positions grow with equity</span>). Slippage applied per trade.
     </div>
   </div>
 
@@ -403,8 +423,13 @@ const BASE_RETURN = 1.0787; // 107.87% return on position size per year
 
 // ── DOM refs ──
 const slider = document.getElementById('capSlider');
+const levSlider = document.getElementById('levSlider');
+const slipSlider = document.getElementById('slipSlider');
 const capDisplay = document.getElementById('capDisplay');
-const posSize = document.getElementById('posSize');
+const levDisplay = document.getElementById('levDisplay');
+const slipDisplay = document.getElementById('slipDisplay');
+const posSizeEl = document.getElementById('posSize');
+const levCompNote = document.getElementById('levCompNote');
 const canvas = document.getElementById('equityCanvas');
 const ctx = canvas.getContext('2d');
 let currentView = '1yr';
@@ -499,25 +524,46 @@ const MAX_POSITION = 500000; // never compound beyond $500K positions
 
 function update() {
   const cap = parseInt(slider.value);
-  const eff = Math.min(cap * 10, MAX_POSITION);
-  const scale = eff / BASE_POS;
+  const lev = parseInt(levSlider.value);
+  const slip = parseFloat(slipSlider.value) / 100; // e.g. -0.007% → -0.00007
 
   capDisplay.textContent = fmtK(cap);
-  posSize.textContent = '$' + eff.toLocaleString();
+  levDisplay.textContent = lev + '×';
+  slipDisplay.textContent = (slip * 100 >= 0 ? '+' : '') + (slip * 100).toFixed(3) + '%';
+  slipDisplay.style.color = slip <= 0 ? 'var(--green)' : 'var(--red)';
 
-  // Scale trades
+  const initPos = Math.min(cap * lev, MAX_POSITION);
+  posSizeEl.textContent = '$' + initPos.toLocaleString();
+  levCompNote.textContent = 'compounding — positions grow with equity, capped at $500K';
+
+  // Build equity curve with compounding leverage + slippage
+  // Each trade: PnL% from backtest applied to current position size
   const equityCurve = [cap];
+  let equity = cap;
   let peak = cap, maxDD = 0, maxDDPct = 0;
-  for (const [, pnl, cumPnl] of RAW) {
-    const eq = cap + cumPnl * scale;
-    equityCurve.push(eq);
-    if (eq > peak) peak = eq;
-    const dd = peak - eq;
+
+  for (let i = 0; i < RAW.length; i++) {
+    const tradePnl = RAW[i][1]; // PnL in $ on $250K positions
+    const tradePctReturn = tradePnl / BASE_POS; // % return on position
+
+    // Current position size: equity * leverage, capped at $500K
+    const currentPos = Math.min(equity * lev, MAX_POSITION);
+
+    // Apply trade return + slippage to current position
+    const dollarPnl = currentPos * (tradePctReturn - slip);
+    equity += dollarPnl;
+
+    equityCurve.push(equity);
+    if (equity > peak) peak = equity;
+    const dd = peak - equity;
     const ddPct = dd / peak;
     if (dd > maxDD) { maxDD = dd; maxDDPct = ddPct; }
   }
 
-  const finalEq = equityCurve[equityCurve.length - 1];
+  // For non-compounding calculations (tables, hero cards) use flat scale
+  const scale = initPos / BASE_POS;
+
+  const finalEq = equity;
   const netReturn = finalEq - cap;
   const returnPct = (netReturn / cap * 100);
 
@@ -530,10 +576,11 @@ function update() {
   document.getElementById('kpiDDPct').textContent = (maxDDPct * 100).toFixed(2) + '% of peak';
 
   // Monthly table (full 3.5 years)
+  const slipPerTrade = slip * BASE_POS; // slippage drag per trade in backtest units
   const mBody = document.getElementById('monthlyBody');
   mBody.innerHTML = '';
   for (const [mo, data] of fullMonthlyData) {
-    const pnl = data.pnl * scale;
+    const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
     const ret = pnl / cap * 100;
     const cls = pctClass(pnl);
     mBody.innerHTML += `<tr>
@@ -548,7 +595,7 @@ function update() {
   const aBody = document.getElementById('annualBody');
   aBody.innerHTML = '';
   for (const [yr, data] of fullAnnualData) {
-    const pnl = data.pnl * scale;
+    const pnl = (data.pnl - slipPerTrade * data.trades) * scale;
     const ret = pnl / cap * 100;
     const cls = pctClass(pnl);
     aBody.innerHTML += `<tr>
@@ -559,9 +606,16 @@ function update() {
     </tr>`;
   }
 
-  // Backtested results — linear scaling, no compounding
-  const pnl12mo = netReturn; // already scaled
-  const pnl35yr = BT35_PNL * scale;
+  // Backtested results
+  const pnl12mo = netReturn; // compounded + slippage from curve
+  // 3.5yr: simulate compounding over 6,653 trades using avg trade return
+  const avgTradeReturn = BT35_PNL / BT35_TRADES / BASE_POS; // avg % per trade
+  let eq35 = cap;
+  for (let i = 0; i < BT35_TRADES; i++) {
+    const pos35 = Math.min(eq35 * lev, MAX_POSITION);
+    eq35 += pos35 * (avgTradeReturn - slip);
+  }
+  const pnl35yr = eq35 - cap;
   const monthlyAvg = pnl35yr / BT35_MONTHS;
   const annualAvg = monthlyAvg * 12;
 
@@ -781,6 +835,8 @@ function drawChart(curve, baseline, labels, projStartIdx) {
 
 // ── Events ──
 slider.addEventListener('input', update);
+levSlider.addEventListener('input', update);
+slipSlider.addEventListener('input', update);
 window.addEventListener('resize', update);
 update();
 </script>
