@@ -551,7 +551,8 @@ function fmtK(n) {
 function pctClass(v) { return v >= 0 ? 'pnl-pos' : 'pnl-neg'; }
 
 // ── Update everything ──
-const MAX_POSITION = 500000; // never compound beyond $500K positions
+const MAX_POSITION_BASE = 500000; // base cap at 10x
+let maxPos = MAX_POSITION_BASE;
 
 function update() {
   const cap = parseInt(slider.value);
@@ -563,7 +564,9 @@ function update() {
   slipDisplay.textContent = (slip * 100 >= 0 ? '+' : '') + (slip * 100).toFixed(3) + '%';
   slipDisplay.style.color = slip <= 0 ? 'var(--green)' : 'var(--red)';
 
-  const initPos = Math.min(cap * lev, MAX_POSITION);
+  // Position cap scales with leverage: $500K at 10x, $250K at 5x, $1M at 20x
+  maxPos = MAX_POSITION_BASE * (lev / 10);
+  const initPos = Math.min(cap * lev, maxPos);
   posSizeEl.textContent = '$' + initPos.toLocaleString();
   levCompNote.textContent = 'compounding — positions grow with equity, capped at $500K';
 
@@ -639,7 +642,7 @@ function update() {
     const tradePctReturn = tradePnl / BASE_POS; // % return on position
 
     // Current position size: equity * leverage, capped at $500K
-    const currentPos = Math.min(equity * lev, MAX_POSITION);
+    const currentPos = Math.min(equity * lev, maxPos);
 
     // Apply trade return + slippage to current position
     const dollarPnl = currentPos * (tradePctReturn - slip);
@@ -764,7 +767,7 @@ function drawView(backtestCurve, cap, scale) {
     const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
     for (let i = firstIdx; i < RAW.length; i++) {
       const tradePctReturn = RAW[i][1] / BASE_POS;
-      const currentPos = Math.min(rebased[rebased.length - 1] * lev, MAX_POSITION);
+      const currentPos = Math.min(rebased[rebased.length - 1] * lev, maxPos);
       const dollarPnl = currentPos * (tradePctReturn - slip);
       rebased.push(rebased[rebased.length - 1] + dollarPnl);
       labels.push(RAW[i][0]);
