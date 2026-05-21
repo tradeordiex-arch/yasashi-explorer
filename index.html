@@ -157,6 +157,47 @@ input[type=range]::-moz-range-thumb {
   font-variant-numeric:tabular-nums;
 }
 
+/* ── Leverage Risk Table ── */
+.risk-table-block {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:24px 28px;
+  margin-bottom:24px;
+}
+.risk-table-head {
+  display:flex; align-items:baseline; gap:12px; margin-bottom:16px;
+}
+.risk-table-title { font-size:15px; font-weight:600; letter-spacing:-0.2px; }
+.risk-table-sub { font-size:12px; color:var(--dim); }
+.risk-table {
+  width:100%; border-collapse:collapse;
+}
+.risk-table th {
+  font-size:10px; font-weight:500; letter-spacing:0.8px;
+  text-transform:uppercase; color:var(--dim);
+  padding:10px 14px; text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.risk-table td {
+  padding:10px 14px; font-size:13px; font-variant-numeric:tabular-nums;
+  border-bottom:1px solid var(--border); color:var(--muted);
+}
+.risk-table tr.active-lev {
+  background:rgba(0,230,118,.06);
+}
+.risk-table tr.active-lev td { color:var(--text); font-weight:500; }
+.verdict {
+  font-size:11px; font-weight:600; padding:3px 10px;
+  border-radius:4px; white-space:nowrap;
+}
+.verdict.conservative { background:rgba(0,230,118,.12); color:var(--green); }
+.verdict.aggressive { background:rgba(68,138,255,.12); color:var(--blue); }
+.verdict.optimal { background:rgba(0,230,118,.15); color:var(--green); }
+.verdict.stomach { background:rgba(255,215,0,.12); color:var(--amber); }
+.verdict.death { background:rgba(255,82,82,.12); color:var(--red); }
+.verdict.blown { background:rgba(255,82,82,.2); color:var(--red); }
+
 /* ── KPI Strip ── */
 .kpis {
   display:grid; grid-template-columns:repeat(5,1fr); gap:16px;
@@ -330,6 +371,27 @@ tbody tr:hover { background:var(--blue-dim); }
     <div class="leverage-note">
       <span id="posSize">$200,000</span> position size (<span id="levCompNote">compounding — positions grow with equity</span>). Slippage applied per trade.
     </div>
+  </div>
+
+  <!-- Leverage Risk Profile -->
+  <div class="risk-table-block">
+    <div class="risk-table-head">
+      <div class="risk-table-title">Leverage Risk Profile</div>
+      <div class="risk-table-sub">Monte Carlo simulation &middot; 10,000 runs</div>
+    </div>
+    <table class="risk-table">
+      <thead><tr>
+        <th>Leverage</th><th>Median Max DD</th><th>95th DD</th><th>Ruin Risk</th><th>Verdict</th>
+      </tr></thead>
+      <tbody id="riskBody">
+        <tr data-lev="5"><td>5×</td><td>23.7%</td><td>33.4%</td><td>0%</td><td><span class="verdict conservative">Conservative pick</span></td></tr>
+        <tr data-lev="8"><td>8×</td><td>36.7%</td><td>49.8%</td><td>0%</td><td><span class="verdict aggressive">Aggressive-but-safe</span></td></tr>
+        <tr data-lev="10"><td>10×</td><td>44.7%</td><td>58.8%</td><td>0%</td><td><span class="verdict optimal">Mathematical optimal</span></td></tr>
+        <tr data-lev="20"><td>20×</td><td>78.5%</td><td>90.7%</td><td>0.05%</td><td><span class="verdict stomach">Stomach-churning</span></td></tr>
+        <tr data-lev="30"><td>30×</td><td>98.4%</td><td>99.9%</td><td>4.7%</td><td><span class="verdict death">Near-death</span></td></tr>
+        <tr data-lev="35"><td>35×+</td><td>100%</td><td>100%</td><td>100%</td><td><span class="verdict blown">Blown up</span></td></tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- Backtested Performance (hero position) -->
@@ -535,6 +597,14 @@ function update() {
   const initPos = Math.min(cap * lev, MAX_POSITION);
   posSizeEl.textContent = '$' + initPos.toLocaleString();
   levCompNote.textContent = 'compounding — positions grow with equity, capped at $500K';
+
+  // Highlight active leverage row in risk table
+  const levRows = [5, 8, 10, 20, 30, 35];
+  let closest = levRows[0];
+  for (const l of levRows) { if (lev >= l) closest = l; }
+  document.querySelectorAll('#riskBody tr').forEach(row => {
+    row.classList.toggle('active-lev', parseInt(row.dataset.lev) === closest);
+  });
 
   // Build equity curve with compounding leverage + slippage
   // Each trade: PnL% from backtest applied to current position size
