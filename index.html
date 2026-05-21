@@ -566,11 +566,11 @@ function update() {
   slipDisplay.textContent = (slip * 100 >= 0 ? '+' : '') + (slip * 100).toFixed(3) + '%';
   slipDisplay.style.color = slip <= 0 ? 'var(--green)' : 'var(--red)';
 
-  // Position cap scales with leverage: $500K at 10x, $250K at 5x, $1M at 20x
-  maxPos = MAX_POSITION_BASE * (lev / 10);
+  // Position cap: initial position × 25 (allows growth but prevents runaway compounding)
+  maxPos = cap * lev * 25;
   const initPos = Math.min(cap * lev, maxPos);
   posSizeEl.textContent = '$' + initPos.toLocaleString();
-  levCompNote.textContent = 'compounding — positions grow with equity, capped at $500K';
+  levCompNote.textContent = 'compounding — positions grow with equity';
 
   // Interpolate risk metrics from known nodes
   const riskNodes = [
