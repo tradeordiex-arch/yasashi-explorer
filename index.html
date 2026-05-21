@@ -645,8 +645,8 @@ function update() {
     const tradePnl = RAW[i][1]; // PnL in $ on $250K positions
     const tradePctReturn = tradePnl / BASE_POS; // % return on position
 
-    // Current position size: equity * leverage, capped at $500K
-    const currentPos = Math.min(equity * lev, maxPos);
+    // Position size: at 1x = flat (no compounding), >1x = compounds with equity
+    const currentPos = lev === 1 ? cap : Math.min(equity * lev, maxPos);
 
     // Apply trade return + slippage to current position
     const dollarPnl = currentPos * (tradePctReturn - slip);
@@ -771,7 +771,7 @@ function drawView(backtestCurve, cap, scale) {
     const labels = [RAW[firstIdx] ? RAW[firstIdx][0] : 'Start'];
     for (let i = firstIdx; i < RAW.length; i++) {
       const tradePctReturn = RAW[i][1] / BASE_POS;
-      const currentPos = Math.min(rebased[rebased.length - 1] * lev, maxPos);
+      const currentPos = lev === 1 ? cap : Math.min(rebased[rebased.length - 1] * lev, maxPos);
       const dollarPnl = currentPos * (tradePctReturn - slip);
       rebased.push(rebased[rebased.length - 1] + dollarPnl);
       labels.push(RAW[i][0]);
