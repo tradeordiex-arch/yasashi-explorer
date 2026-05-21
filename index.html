@@ -597,7 +597,18 @@ function update() {
     }
     return riskNodes[riskNodes.length-1];
   }
-  const risk = interpRisk(lev);
+  const rawRisk = interpRisk(lev);
+
+  // Slippage degrades risk metrics — each 0.01% slippage erodes ~0.8% of edge
+  // Strategy avg return per trade: ~0.06%. Slippage at 0.018% eats 30% of edge.
+  const avgRetPerTrade = 0.0006; // 0.06% avg return per trade
+  const edgeErosion = Math.min(slip / avgRetPerTrade, 0.95); // what fraction of edge is eaten
+  const slipMult = 1 + edgeErosion * 1.5; // DD amplifier: 30% edge loss → 45% worse DD
+  const risk = {
+    mdd: Math.min(rawRisk.mdd * slipMult, 100),
+    p95: Math.min(rawRisk.p95 * slipMult, 100),
+    ruin: Math.min(rawRisk.ruin * Math.pow(slipMult, 3) + (edgeErosion > 0.5 ? edgeErosion * 10 : 0), 100),
+  };
 
   const mddEl = document.getElementById('riskMDD'); const p95El = document.getElementById('risk95'); const ruinEl = document.getElementById('riskRuin');
   mddEl.textContent = risk.mdd.toFixed(1) + '%';
