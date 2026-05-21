@@ -435,6 +435,11 @@ function computeAnnual(monthly) {
 const monthlyData = computeMonthly();
 const annualData = computeAnnual(monthlyData);
 
+// 3.5-year backtest actuals (Aug 2022 — May 2026, $250K positions)
+const BT35_PNL = 777354;
+const BT35_TRADES = 6653;
+const BT35_MONTHS = 42;
+
 // Build full 3.5-year monthly data (Aug 2022 — May 2026)
 // Earlier period: distribute $507,677 PnL and 4,934 trades across ~33 months
 function buildFullMonthly() {
@@ -582,13 +587,6 @@ function setView(v) {
     t.classList.toggle('active', t.dataset.view === v));
   update();
 }
-
-// 3.5-year backtest actuals (Aug 2022 — May 2026, $250K positions)
-const BT35_PNL = 777354;   // total PnL on $250K
-const BT35_TRADES = 6653;
-const BT35_MONTHS = 42;    // ~3.5 years
-const BT35_WR = 72.01;
-const BT35_MAXDD_PCT = 5.98;
 
 function drawView(backtestCurve, cap, scale) {
   if (currentView === '1mo') {
