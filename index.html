@@ -596,7 +596,7 @@ function update() {
   }
   const risk = interpRisk(lev);
 
-  const mddEl = $('riskMDD'); const p95El = $('risk95'); const ruinEl = $('riskRuin');
+  const mddEl = document.getElementById('riskMDD'); const p95El = document.getElementById('risk95'); const ruinEl = document.getElementById('riskRuin');
   mddEl.textContent = risk.mdd.toFixed(1) + '%';
   p95El.textContent = risk.p95.toFixed(1) + '%';
   ruinEl.textContent = risk.ruin < 0.01 ? '0%' : risk.ruin.toFixed(2) + '%';
@@ -608,7 +608,7 @@ function update() {
   ruinEl.style.color = risk.ruin < 0.01 ? 'var(--green)' : risk.ruin < 1 ? 'var(--amber)' : 'var(--red)';
 
   // Bars
-  const mddBar = $('riskMDDBar'); const p95Bar = $('risk95Bar'); const ruinBar = $('riskRuinBar');
+  const mddBar = document.getElementById('riskMDDBar'); const p95Bar = document.getElementById('risk95Bar'); const ruinBar = document.getElementById('riskRuinBar');
   mddBar.style.width = risk.mdd + '%';
   mddBar.className = 'rm-fill' + (risk.mdd < 40 ? '' : risk.mdd < 70 ? ' warn' : ' danger');
   p95Bar.style.width = risk.p95 + '%';
@@ -626,7 +626,7 @@ function update() {
     { max:999, text:'Blown up', bg:'rgba(255,82,82,.2)', color:'var(--red)' },
   ];
   const v = verdicts.find(v => lev <= v.max) || verdicts[verdicts.length-1];
-  const vEl = $('riskVerdict');
+  const vEl = document.getElementById('riskVerdict');
   vEl.textContent = v.text;
   vEl.style.background = v.bg;
   vEl.style.color = v.color;
