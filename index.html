@@ -103,6 +103,60 @@ input[type=range]::-moz-range-thumb {
 }
 .leverage-note span { color:var(--green); font-weight:600; }
 
+/* ── Performance Hero ── */
+.perf-hero {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:28px;
+  margin-bottom:24px;
+  position:relative;
+  overflow:hidden;
+}
+.perf-hero::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg, var(--green), rgba(0,230,118,.2), transparent);
+}
+.perf-hero-head {
+  display:flex; align-items:baseline; gap:12px;
+  margin-bottom:24px;
+}
+.perf-hero-title {
+  font-size:17px; font-weight:600; letter-spacing:-0.2px; color:#fff;
+}
+.perf-hero-sub {
+  font-size:12px; color:var(--dim); letter-spacing:0.3px;
+}
+.perf-hero-grid {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:16px;
+}
+.perf-card {
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:20px 18px;
+  text-align:center;
+  transition:border-color .2s;
+}
+.perf-card.featured {
+  border-color:rgba(0,230,118,.15);
+  background:linear-gradient(180deg, rgba(0,230,118,.04) 0%, var(--surface2) 100%);
+}
+.perf-card:hover { border-color:var(--border2); }
+.pc-label {
+  font-size:10px; font-weight:500; letter-spacing:0.8px;
+  text-transform:uppercase; color:var(--dim); margin-bottom:10px;
+}
+.pc-val {
+  font-size:24px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums; letter-spacing:-0.5px;
+}
+.pc-val.green { color:var(--green); }
+.pc-sub {
+  font-size:11px; color:var(--muted); margin-top:6px;
+  font-variant-numeric:tabular-nums;
+}
+
 /* ── KPI Strip ── */
 .kpis {
   display:grid; grid-template-columns:repeat(5,1fr); gap:16px;
@@ -205,43 +259,6 @@ tbody tr:hover { background:var(--blue-dim); }
 .pnl-pos { color:var(--green); }
 .pnl-neg { color:var(--red); }
 
-/* ── 4-Year Projection ── */
-.proj-block {
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:24px;
-}
-.proj-title {
-  font-size:15px; font-weight:600; letter-spacing:-0.2px;
-  margin-bottom:20px;
-}
-.proj-grid {
-  display:grid; grid-template-columns:repeat(4,1fr); gap:16px;
-}
-.proj-card {
-  background:var(--surface2);
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:14px 16px;
-  text-align:center;
-}
-.proj-card .yr {
-  font-size:10px; font-weight:500; color:var(--dim);
-  letter-spacing:0.8px; text-transform:uppercase; margin-bottom:5px;
-}
-.proj-card .pv {
-  font-size:18px; font-weight:600; color:var(--green);
-  font-variant-numeric:tabular-nums;
-}
-.proj-card .pd {
-  font-size:12px; color:var(--muted); margin-top:3px; font-variant-numeric:tabular-nums;
-}
-.proj-note {
-  font-size:12px; color:var(--muted); margin-top:16px;
-  padding-top:12px; border-top:1px solid var(--border);
-  line-height:1.6;
-}
 
 /* ── Footer ── */
 .foot {
@@ -258,14 +275,15 @@ tbody tr:hover { background:var(--blue-dim); }
 
 @media(max-width:800px) {
   .kpis { grid-template-columns:repeat(3,1fr); }
+  .perf-hero-grid { grid-template-columns:repeat(2,1fr); }
   .tables-grid { grid-template-columns:1fr; }
-  .proj-grid { grid-template-columns:repeat(2,1fr); }
   .slider-row { flex-wrap:wrap; }
   .slider-val { min-width:auto; }
 }
 @media(max-width:500px) {
   .kpis { grid-template-columns:repeat(2,1fr); }
-  .proj-grid { grid-template-columns:1fr 1fr; }
+  .perf-hero-grid { grid-template-columns:1fr 1fr; }
+  .perf-hero { padding:20px 16px; }
   .shell { padding:20px 14px 60px; }
 }
 </style>
@@ -291,6 +309,36 @@ tbody tr:hover { background:var(--blue-dim); }
     </div>
     <div class="leverage-note">
       10× leverage &mdash; <span id="posSize">$200,000</span> flat position size (no compounding, $500K max)
+    </div>
+  </div>
+
+  <!-- Backtested Performance (hero position) -->
+  <div class="perf-hero">
+    <div class="perf-hero-head">
+      <div class="perf-hero-title">Backtested Performance</div>
+      <div class="perf-hero-sub">at selected capital &middot; flat position sizing</div>
+    </div>
+    <div class="perf-hero-grid">
+      <div class="perf-card featured">
+        <div class="pc-label">12-Month Return</div>
+        <div class="pc-val green" id="proj1">—</div>
+        <div class="pc-sub" id="proj1d">1,719 trades</div>
+      </div>
+      <div class="perf-card featured">
+        <div class="pc-label">3.5-Year Return</div>
+        <div class="pc-val green" id="proj2">—</div>
+        <div class="pc-sub" id="proj2d">6,653 trades</div>
+      </div>
+      <div class="perf-card">
+        <div class="pc-label">Monthly Avg</div>
+        <div class="pc-val" id="proj3">—</div>
+        <div class="pc-sub" id="proj3d">—</div>
+      </div>
+      <div class="perf-card">
+        <div class="pc-label">Annual Avg</div>
+        <div class="pc-val" id="proj4">—</div>
+        <div class="pc-sub" id="proj4d">—</div>
+      </div>
     </div>
   </div>
 
@@ -337,21 +385,6 @@ tbody tr:hover { background:var(--blue-dim); }
         <table><thead><tr><th>Year</th><th>PnL</th><th>Return</th><th>Trades</th></tr></thead>
         <tbody id="annualBody"></tbody></table>
       </div>
-    </div>
-  </div>
-
-  <!-- Backtest Results -->
-  <div class="proj-block">
-    <div class="proj-title">Backtested Performance at Selected Capital</div>
-    <div class="proj-grid">
-      <div class="proj-card"><div class="yr">12-Month</div><div class="pv" id="proj1">—</div><div class="pd" id="proj1d">1,719 trades</div></div>
-      <div class="proj-card"><div class="yr">3.5-Year</div><div class="pv" id="proj2">—</div><div class="pd" id="proj2d">6,653 trades</div></div>
-      <div class="proj-card"><div class="yr">Monthly Avg</div><div class="pv" id="proj3">—</div><div class="pd" id="proj3d">—</div></div>
-      <div class="proj-card"><div class="yr">Annual Avg</div><div class="pv" id="proj4">—</div><div class="pd" id="proj4d">—</div></div>
-    </div>
-    <div class="proj-note">
-      Results scaled linearly from $250K backtest positions to 10&times; leveraged position size. Position size is flat (no compounding).
-      Past performance does not guarantee future results.
     </div>
   </div>
 
